@@ -1,22 +1,26 @@
 package com.example.iam
 
+import android.app.AlarmManager
 import android.app.NotificationChannel
 import android.app.NotificationManager
+import android.app.PendingIntent
 import android.content.Context
-import android.media.MediaPlayer
+import android.content.Intent
 import android.os.Build
 import android.util.Log
 import androidx.core.app.NotificationCompat
 import com.google.firebase.messaging.FirebaseMessagingService
 import com.google.firebase.messaging.RemoteMessage
 import com.example.iam.network.TokenUploader
-import com.example.iam.R
+import java.util.concurrent.atomic.AtomicInteger
 
 class MyFirebaseMessagingService : FirebaseMessagingService() {
     companion object {
         private const val TAG = "MyFirebaseMsgSvc"
         private const val CHANNEL_ID = "fcm_default_channel"
         private const val ALARM_CHANNEL_ID = "alarm_channel"
+        // Use an AtomicInteger to ensure thread-safe increments for notification IDs.
+        private val notificationId = AtomicInteger(0)
     }
 
     override fun onNewToken(token: String) {
@@ -29,77 +33,61 @@ class MyFirebaseMessagingService : FirebaseMessagingService() {
         super.onMessageReceived(remoteMessage)
         Log.d(TAG, "From: ${remoteMessage.from}")
 
-        // Revisa si el mensaje tiene un "data payload"
         if (remoteMessage.data.isNotEmpty()) {
             Log.d(TAG, "Data payload: ${remoteMessage.data}")
             val type = remoteMessage.data["tipo"]
             if (type == "alarma") {
-                // Es una notificación de tipo alarma
-                dispararAlarma(remoteMessage.data["title"], remoteMessage.data["body"])
+                Log.d(TAG, "Mensaje de debug")
+                scheduleAlarm()
+                showNotification(remoteMessage.data["title"], remoteMessage.data["body"], ALARM_CHANNEL_ID, NotificationCompat.PRIORITY_HIGH)
             } else {
-                // Es una notificación de datos normal
+                Log.d(TAG, "Mensaje de notificación")
                 showNotification(remoteMessage.data["title"], remoteMessage.data["body"])
             }
         } else {
-            // Si no hay "data payload", puede ser una notificación estándar desde la consola de Firebase
             remoteMessage.notification?.let {
                 showNotification(it.title, it.body)
             }
         }
     }
 
-    private fun showNotification(title: String?, body: String?) {
+    private fun scheduleAlarm() {
+        val alarmManager = getSystemService(Context.ALARM_SERVICE) as AlarmManager
+        val intent = Intent(this, AlarmReceiver::class.java)
+        val pendingIntent = PendingIntent.getBroadcast(this, 0, intent, PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT)
+        val triggerTime = System.currentTimeMillis() + 500 // 500ms from now
+
+        // On Android 12 (S) and above, check for permission to schedule exact alarms.
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S && alarmManager.canScheduleExactAlarms()) {
+            // Permission is granted, schedule the exact alarm.
+            alarmManager.setExactAndAllowWhileIdle(AlarmManager.RTC_WAKEUP, triggerTime, pendingIntent)
+            Log.d(TAG, "Exact alarm scheduled successfully.")
+        } else {
+            // Permission not granted or on an older Android version.
+            // Fall back to an inexact alarm. This will still work but might be slightly delayed.
+            alarmManager.setAndAllowWhileIdle(AlarmManager.RTC_WAKEUP, triggerTime, pendingIntent)
+            Log.w(TAG, "Scheduling inexact alarm as permission for exact alarms is not granted.")
+        }
+    }
+
+    private fun showNotification(title: String?, body: String?, channelId: String = CHANNEL_ID, priority: Int = NotificationCompat.PRIORITY_DEFAULT) {
         val nm = getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-            val channel = NotificationChannel(CHANNEL_ID, "Notificaciones Generales", NotificationManager.IMPORTANCE_DEFAULT)
+            val name = if (channelId == ALARM_CHANNEL_ID) "Alarmas" else "Notificaciones Generales"
+            val importance = if (channelId == ALARM_CHANNEL_ID) NotificationManager.IMPORTANCE_HIGH else NotificationManager.IMPORTANCE_DEFAULT
+            val channel = NotificationChannel(channelId, name, importance)
             nm.createNotificationChannel(channel)
         }
 
-        val n = NotificationCompat.Builder(this, CHANNEL_ID)
+        val n = NotificationCompat.Builder(this, channelId)
             .setContentTitle(title ?: "Nuevo mensaje")
             .setContentText(body ?: "")
             .setSmallIcon(R.drawable.ic_notification)
+            .setPriority(priority)
             .setAutoCancel(true)
             .build()
 
-        nm.notify(System.currentTimeMillis().toInt(), n)
-    }
-
-    private fun dispararAlarma(title: String?, body: String?) {
-        val notificationManager = getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
-
-        // Crear un canal de notificación de alta prioridad para las alarmas (para Android 8.0+)
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-            val channel = NotificationChannel(
-                ALARM_CHANNEL_ID, "Alarmas",
-                NotificationManager.IMPORTANCE_HIGH
-            ).apply {
-                description = "Notificaciones críticas de alarma"
-            }
-            notificationManager.createNotificationChannel(channel)
-        }
-
-        val notification = NotificationCompat.Builder(this, ALARM_CHANNEL_ID)
-            .setContentTitle(title ?: "¡Alarma!")
-            .setContentText(body ?: "Ha llegado un trigger importante del backend.")
-            .setSmallIcon(R.drawable.ic_notification) // <-- Considera cambiar esto a un icono de alarma como R.drawable.ic_alarm
-            .setPriority(NotificationCompat.PRIORITY_HIGH)
-            .setCategory(NotificationCompat.CATEGORY_ALARM)
-            .setAutoCancel(true)
-            .build()
-
-        // Usamos un ID fijo para las notificaciones de alarma para que se actualicen en lugar de apilarse
-        notificationManager.notify(1, notification)
-
-        // Reproducir un sonido de alarma
-        try {
-            // IMPORTANTE: Debes añadir un archivo de sonido (ej: sonido_alarma.mp3)
-            // en la carpeta de recursos `res/raw`.
-            val mediaPlayer = MediaPlayer.create(this, R.raw.sonido_alarma)
-            mediaPlayer?.setOnCompletionListener { it.release() } // Libera recursos al terminar
-            mediaPlayer?.start()
-        } catch (e: Exception) {
-            Log.e(TAG, "Error al reproducir sonido. ¿Falta el archivo en res/raw/sonido_alarma?", e)
-        }
+        // Use an incrementing integer for the notification ID
+        nm.notify(notificationId.incrementAndGet(), n)
     }
 }
