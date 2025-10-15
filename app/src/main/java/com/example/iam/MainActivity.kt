@@ -35,7 +35,14 @@ fun WebViewPage(url: String) {
                 settings.javaScriptEnabled = true
                 settings.loadWithOverviewMode = true
                 settings.useWideViewPort = true
-                webViewClient = WebViewClient()
+                settings.domStorageEnabled = true
+                webViewClient = object : WebViewClient() {
+                    override fun onPageFinished(view: WebView, url: String) {
+                        // Forzamos un rediseño cuando la página termina de cargar
+                        // para solucionar problemas de altura en contenido dinámico.
+                        view.requestLayout()
+                    }
+                }
                 loadUrl(url)
             }
         }
