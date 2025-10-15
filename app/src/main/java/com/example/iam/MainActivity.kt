@@ -1,10 +1,13 @@
 package com.example.iam
 
 import android.Manifest
+import android.app.AlarmManager
 import android.content.Context
+import android.content.Intent
 import android.content.pm.PackageManager
 import android.os.Build
 import android.os.Bundle
+import android.provider.Settings
 import android.util.Log
 import android.view.ViewGroup
 import android.webkit.WebChromeClient
@@ -39,7 +42,11 @@ class MainActivity : ComponentActivity() {
             WebViewPage(url = "https://s8s23kr8-5173.usw3.devtunnels.ms")
         }
 
-        // Pedir permiso en Android 13+
+        requestNotificationPermission()
+        requestExactAlarmPermission()
+    }
+
+    private fun requestNotificationPermission() {
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
             when (ContextCompat.checkSelfPermission(this, Manifest.permission.POST_NOTIFICATIONS)) {
                 PackageManager.PERMISSION_GRANTED -> getFcmToken()
@@ -47,6 +54,18 @@ class MainActivity : ComponentActivity() {
             }
         } else {
             getFcmToken()
+        }
+    }
+
+    private fun requestExactAlarmPermission() {
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
+            val alarmManager = getSystemService(Context.ALARM_SERVICE) as AlarmManager
+            if (!alarmManager.canScheduleExactAlarms()) {
+                Log.d(TAG, "Requesting permission for exact alarms.")
+                Intent(Settings.ACTION_REQUEST_SCHEDULE_EXACT_ALARM).also { intent ->
+                    startActivity(intent)
+                }
+            }
         }
     }
 
