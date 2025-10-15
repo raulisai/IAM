@@ -2,6 +2,7 @@ package com.example.iam
 
 import android.os.Bundle
 import android.view.ViewGroup
+import android.webkit.WebChromeClient
 import android.webkit.WebView
 import android.webkit.WebViewClient
 import androidx.activity.ComponentActivity
@@ -26,7 +27,8 @@ class MainActivity : ComponentActivity() {
 fun WebViewPage(url: String) {
     AndroidView(
         modifier = Modifier.fillMaxSize(),
-        factory = { context ->
+        factory = {
+            context ->
             WebView(context).apply {
                 layoutParams = ViewGroup.LayoutParams(
                     ViewGroup.LayoutParams.MATCH_PARENT,
@@ -36,15 +38,22 @@ fun WebViewPage(url: String) {
                 settings.loadWithOverviewMode = true
                 settings.useWideViewPort = true
                 settings.domStorageEnabled = true
-                webViewClient = object : WebViewClient() {
-                    override fun onPageFinished(view: WebView, url: String) {
-                        // Forzamos un rediseño cuando la página termina de cargar
-                        // para solucionar problemas de altura en contenido dinámico.
-                        view.requestLayout()
+
+                webViewClient = WebViewClient()
+
+                webChromeClient = object : WebChromeClient() {
+                    override fun onProgressChanged(view: WebView, newProgress: Int) {
+                        if (newProgress == 100) {
+                            view.post {
+                                view.requestLayout()
+                            }
+                        }
                     }
                 }
-                loadUrl(url)
             }
+        },
+        update = { webView ->
+            webView.loadUrl(url)
         }
     )
 }
