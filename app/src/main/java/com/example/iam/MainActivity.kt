@@ -10,6 +10,7 @@ import android.os.Bundle
 import android.provider.Settings
 import android.util.Log
 import android.view.ViewGroup
+import android.webkit.PermissionRequest
 import android.webkit.WebChromeClient
 import android.webkit.WebView
 import android.webkit.WebViewClient
@@ -18,7 +19,9 @@ import androidx.activity.compose.setContent
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.remember
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.viewinterop.AndroidView
 import androidx.core.content.ContextCompat
 import androidx.core.net.toUri
@@ -37,12 +40,27 @@ class MainActivity : ComponentActivity() {
     private val healthConnectManager: HealthConnectManager by lazy { HealthConnectManager(this) }
 
     private var startupSyncDone = false
+    private var pendingPermissionRequest: PermissionRequest? = null
 
     private val requestNotificationPermission = registerForActivityResult(
         ActivityResultContracts.RequestPermission()
     ) { granted ->
         Log.d(TAG, "POST_NOTIFICATIONS granted=$granted")
         if (granted) getFcmToken()
+    }
+
+    private val requestAudioPermission = registerForActivityResult(
+        ActivityResultContracts.RequestPermission()
+    ) { granted ->
+        Log.d(TAG, "RECORD_AUDIO granted=$granted")
+        pendingPermissionRequest?.let {
+            if (granted) {
+                it.grant(arrayOf(PermissionRequest.RESOURCE_AUDIO_CAPTURE))
+            } else {
+                it.deny()
+            }
+            pendingPermissionRequest = null
+        }
     }
 
     private val requestHealthPermissions = registerForActivityResult(
@@ -71,11 +89,20 @@ class MainActivity : ComponentActivity() {
         windowInsetsController.hide(WindowInsetsCompat.Type.systemBars())
 
         setContent {
-            WebViewPage(url = "https://s8s23kr8-5173.usw3.devtunnels.ms")
+            WebViewPage(
+                url = "https://s8s23kr8-5173.usw3.devtunnels.ms",
+                requestAudioPermission = {
+                    requestAudioPermission.launch(Manifest.permission.RECORD_AUDIO)
+                },
+                setPendingPermissionRequest = { request ->
+                    pendingPermissionRequest = request
+                }
+            )
         }
 
         requestNotificationPermission()
         requestExactAlarmPermission()
+        requestAudioPermission.launch(Manifest.permission.RECORD_AUDIO)
         // moved performStartupHealthSync to onResume to avoid permission activity closing early
     }
 
@@ -342,35 +369,55 @@ class MainActivity : ComponentActivity() {
 }
 
 @Composable
-fun WebViewPage(url: String) {
-    AndroidView(
-        modifier = Modifier.fillMaxSize(),
-        factory = { context: Context ->
-            WebView(context).apply {
-                layoutParams = ViewGroup.LayoutParams(
-                    ViewGroup.LayoutParams.MATCH_PARENT,
-                    ViewGroup.LayoutParams.MATCH_PARENT
-                )
-                settings.javaScriptEnabled = true
-                settings.loadWithOverviewMode = true
-                settings.useWideViewPort = true
-                settings.domStorageEnabled = true
+fun WebViewPage(
+    url: String,
+    requestAudioPermission: () -> Unit,
+    setPendingPermissionRequest: (PermissionRequest) -> Unit
+) {
+    val context = LocalContext.current
+    val webView = remember {
+        WebView(context).apply {
+            layoutParams = ViewGroup.LayoutParams(
+                ViewGroup.LayoutParams.MATCH_PARENT,
+                ViewGroup.LayoutParams.MATCH_PARENT
+            )
+            settings.javaScriptEnabled = true
+            settings.loadWithOverviewMode = true
+            settings.useWideViewPort = true
+            settings.domStorageEnabled = true
+            settings.mediaPlaybackRequiresUserGesture = false
 
-                webViewClient = WebViewClient()
+            webViewClient = WebViewClient()
 
-                webChromeClient = object : WebChromeClient() {
-                    override fun onProgressChanged(view: WebView, newProgress: Int) {
-                        if (newProgress == 100) {
-                            view.post {
-                                view.requestLayout()
-                            }
+            webChromeClient = object : WebChromeClient() {
+                override fun onPermissionRequest(request: PermissionRequest) {
+                    // Be less strict with origin check
+                    if (request.origin.toString().startsWith("https://s8s23kr8-5173.usw3.devtunnels.ms")) {
+                        if (request.resources.contains(PermissionRequest.RESOURCE_AUDIO_CAPTURE)) {
+                            setPendingPermissionRequest(request)
+                            requestAudioPermission()
+                        } else {
+                            request.deny()
+                        }
+                    } else {
+                        request.deny()
+                    }
+                }
+
+                override fun onProgressChanged(view: WebView, newProgress: Int) {
+                    if (newProgress == 100) {
+                        view.post {
+                            view.requestLayout()
                         }
                     }
                 }
             }
-        },
-        update = { webView ->
-            webView.loadUrl(url)
         }
+    }
+
+    AndroidView(
+        modifier = Modifier.fillMaxSize(),
+        factory = { webView },
+        update = { it.loadUrl(url) }
     )
 }
