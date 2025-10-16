@@ -10,7 +10,6 @@ import android.os.Bundle
 import android.provider.Settings
 import android.util.Log
 import android.view.ViewGroup
-import android.webkit.JavascriptInterface
 import android.webkit.PermissionRequest
 import android.webkit.WebChromeClient
 import android.webkit.WebSettings
@@ -38,6 +37,7 @@ class MainActivity : ComponentActivity() {
     private val TAG = "MainActivity"
 
     private lateinit var webView: WebView
+    private lateinit var ttsInterface: TTSInterface
     private val healthConnectManager: HealthConnectManager by lazy { HealthConnectManager(this) }
 
     private var startupSyncDone = false
@@ -130,8 +130,9 @@ class MainActivity : ComponentActivity() {
 
         }
         
-        // AQUÍ VA ESTA LÍNEA:
-        webView.addJavascriptInterface(TTSInterface(this), "AndroidTTS")
+        // Inicializar TTSInterface y registrarlo en el WebView
+        ttsInterface = TTSInterface(this)
+        webView.addJavascriptInterface(ttsInterface, "AndroidTTS")
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.KITKAT) {
             WebView.setWebContentsDebuggingEnabled(true)
         }
@@ -178,6 +179,12 @@ class MainActivity : ComponentActivity() {
                 }
             }
         }
+    }
+
+    override fun onDestroy() {
+        super.onDestroy()
+        // Llamar a shutdown() para liberar recursos de TTS si es necesario
+        ttsInterface.shutdown()
     }
 
     // Nuevo: diálogo que guía al usuario a los ajustes de Health Connect
@@ -412,11 +419,4 @@ fun WebViewPage(webView: WebView) {
         modifier = Modifier.fillMaxSize(),
         factory = { webView }
     )
-}
-
-class TTSInterface(private val context: Context) {
-    @JavascriptInterface
-    fun speak(text: String) {
-        // Your Text-to-Speech logic here
-    }
 }
