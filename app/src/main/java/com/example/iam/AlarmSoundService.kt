@@ -49,7 +49,7 @@ class AlarmSoundService : Service(), MediaPlayer.OnCompletionListener, MediaPlay
             mediaPlayer?.release()
         }
 
-        mediaPlayer = MediaPlayer.create(this, R.raw.sonido_alarma)
+        mediaPlayer = MediaPlayer.create(this, R.raw.trabajar_sonido)
 
         if (mediaPlayer == null) {
             Log.e(TAG, "Failed to create MediaPlayer, resource might be missing.")
