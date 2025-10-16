@@ -11,8 +11,8 @@ android {
 
     defaultConfig {
         applicationId = "com.example.iam"
-        minSdk = 24
-        targetSdk = 36
+        minSdk = 26
+        targetSdk = 34
         versionCode = 1
         versionName = "1.0"
 
@@ -62,5 +62,7 @@ dependencies {
     implementation("com.google.firebase:firebase-messaging:24.0.1")
     implementation("com.squareup.retrofit2:retrofit:2.9.0")
     implementation("com.squareup.retrofit2:converter-moshi:2.9.0")
+    implementation("com.squareup.moshi:moshi-kotlin:1.15.0")
     implementation("com.squareup.okhttp3:logging-interceptor:4.11.0")
+    implementation("androidx.health.connect:connect-client:1.2.0-alpha02")
 }
