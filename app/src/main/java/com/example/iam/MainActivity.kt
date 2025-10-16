@@ -10,8 +10,10 @@ import android.os.Bundle
 import android.provider.Settings
 import android.util.Log
 import android.view.ViewGroup
+import android.webkit.JavascriptInterface
 import android.webkit.PermissionRequest
 import android.webkit.WebChromeClient
+import android.webkit.WebSettings
 import android.webkit.WebView
 import android.webkit.WebViewClient
 import androidx.activity.ComponentActivity
@@ -19,9 +21,7 @@ import androidx.activity.compose.setContent
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.remember
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.viewinterop.AndroidView
 import androidx.core.content.ContextCompat
 import androidx.core.net.toUri
@@ -37,6 +37,7 @@ import kotlinx.coroutines.launch
 class MainActivity : ComponentActivity() {
     private val TAG = "MainActivity"
 
+    private lateinit var webView: WebView
     private val healthConnectManager: HealthConnectManager by lazy { HealthConnectManager(this) }
 
     private var startupSyncDone = false
@@ -88,22 +89,59 @@ class MainActivity : ComponentActivity() {
         windowInsetsController.systemBarsBehavior = WindowInsetsControllerCompat.BEHAVIOR_SHOW_TRANSIENT_BARS_BY_SWIPE
         windowInsetsController.hide(WindowInsetsCompat.Type.systemBars())
 
-        setContent {
-            WebViewPage(
-                url = "https://s8s23kr8-5173.usw3.devtunnels.ms",
-                requestAudioPermission = {
-                    requestAudioPermission.launch(Manifest.permission.RECORD_AUDIO)
-                },
-                setPendingPermissionRequest = { request ->
-                    pendingPermissionRequest = request
-                }
+        webView = WebView(this).apply {
+            layoutParams = ViewGroup.LayoutParams(
+                ViewGroup.LayoutParams.MATCH_PARENT,
+                ViewGroup.LayoutParams.MATCH_PARENT
             )
+            settings.javaScriptEnabled = true
+            settings.loadWithOverviewMode = true
+            settings.useWideViewPort = true
+            settings.domStorageEnabled = true
+            settings.mediaPlaybackRequiresUserGesture = false
+            settings.mixedContentMode = WebSettings.MIXED_CONTENT_ALWAYS_ALLOW
+
+            webViewClient = WebViewClient()
+
+            webChromeClient = object : WebChromeClient() {
+                override fun onPermissionRequest(request: PermissionRequest) {
+                    // Be less strict with origin check
+                    if (request.origin.toString().startsWith("https://s8s23kr8-5173.usw3.devtunnels.ms")) {
+                        if (request.resources.contains(PermissionRequest.RESOURCE_AUDIO_CAPTURE)) {
+                            pendingPermissionRequest = request
+                            requestAudioPermission.launch(Manifest.permission.RECORD_AUDIO)
+                        } else {
+                            request.grant(request.resources)
+                        }
+                    } else {
+                        request.deny()
+                    }
+                }
+
+                override fun onProgressChanged(view: WebView, newProgress: Int) {
+                    if (newProgress == 100) {
+                        view.post {
+                            view.requestLayout()
+                        }
+                    }
+                }
+            }
+            loadUrl("https://s8s23kr8-5173.usw3.devtunnels.ms")
+
+        }
+        
+        // AQUÍ VA ESTA LÍNEA:
+        webView.addJavascriptInterface(TTSInterface(this), "AndroidTTS")
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.KITKAT) {
+            WebView.setWebContentsDebuggingEnabled(true)
+        }
+        setContent {
+            WebViewPage(webView = webView)
         }
 
         requestNotificationPermission()
         requestExactAlarmPermission()
         requestAudioPermission.launch(Manifest.permission.RECORD_AUDIO)
-        // moved performStartupHealthSync to onResume to avoid permission activity closing early
     }
 
     override fun onResume() {
@@ -116,7 +154,7 @@ class MainActivity : ComponentActivity() {
             performStartupHealthSync()
         } else {
             // Si ya se hizo el sync inicial, solo verificar al volver a la app
-            // Esto es útil si el usuario cambió permisos manualmente
+            // Esto es útil si el usuario cambió permisos manually
             lifecycleScope.launch {
                 // Retraso para dar tiempo al sistema a actualizar el estado de los permisos
                 kotlinx.coroutines.delay(500)
@@ -369,55 +407,16 @@ class MainActivity : ComponentActivity() {
 }
 
 @Composable
-fun WebViewPage(
-    url: String,
-    requestAudioPermission: () -> Unit,
-    setPendingPermissionRequest: (PermissionRequest) -> Unit
-) {
-    val context = LocalContext.current
-    val webView = remember {
-        WebView(context).apply {
-            layoutParams = ViewGroup.LayoutParams(
-                ViewGroup.LayoutParams.MATCH_PARENT,
-                ViewGroup.LayoutParams.MATCH_PARENT
-            )
-            settings.javaScriptEnabled = true
-            settings.loadWithOverviewMode = true
-            settings.useWideViewPort = true
-            settings.domStorageEnabled = true
-            settings.mediaPlaybackRequiresUserGesture = false
-
-            webViewClient = WebViewClient()
-
-            webChromeClient = object : WebChromeClient() {
-                override fun onPermissionRequest(request: PermissionRequest) {
-                    // Be less strict with origin check
-                    if (request.origin.toString().startsWith("https://s8s23kr8-5173.usw3.devtunnels.ms")) {
-                        if (request.resources.contains(PermissionRequest.RESOURCE_AUDIO_CAPTURE)) {
-                            setPendingPermissionRequest(request)
-                            requestAudioPermission()
-                        } else {
-                            request.deny()
-                        }
-                    } else {
-                        request.deny()
-                    }
-                }
-
-                override fun onProgressChanged(view: WebView, newProgress: Int) {
-                    if (newProgress == 100) {
-                        view.post {
-                            view.requestLayout()
-                        }
-                    }
-                }
-            }
-        }
-    }
-
+fun WebViewPage(webView: WebView) {
     AndroidView(
         modifier = Modifier.fillMaxSize(),
-        factory = { webView },
-        update = { it.loadUrl(url) }
+        factory = { webView }
     )
+}
+
+class TTSInterface(private val context: Context) {
+    @JavascriptInterface
+    fun speak(text: String) {
+        // Your Text-to-Speech logic here
+    }
 }
