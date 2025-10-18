@@ -30,7 +30,6 @@ class AlarmSoundService : Service(), MediaPlayer.OnCompletionListener, MediaPlay
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
         Log.d(TAG, "AlarmSoundService started")
 
-        // Acquire WakeLock
         val powerManager = getSystemService(Context.POWER_SERVICE) as PowerManager
         wakeLock = powerManager.newWakeLock(PowerManager.PARTIAL_WAKE_LOCK, "IAM::AlarmWakeLock")
         wakeLock?.acquire(10*60*1000L /*10 minutes timeout*/)
@@ -39,25 +38,33 @@ class AlarmSoundService : Service(), MediaPlayer.OnCompletionListener, MediaPlay
         val notification = createNotification()
         startForeground(NOTIFICATION_ID, notification)
 
-        playSound()
+        val soundName = intent?.getStringExtra("sonido")
+        playSound(soundName)
 
         return START_NOT_STICKY
     }
 
-    private fun playSound() {
+    private fun playSound(soundName: String?) {
         if (mediaPlayer != null) {
             mediaPlayer?.release()
         }
 
-        mediaPlayer = MediaPlayer.create(this, R.raw.trabajar_sonido)
+        val soundResId = if (soundName != null) {
+            resources.getIdentifier(soundName, "raw", packageName)
+        } else {
+            0
+        }
+
+        val finalResId = if (soundResId != 0) soundResId else R.raw.trabajar_sonido
+
+        mediaPlayer = MediaPlayer.create(this, finalResId)
 
         if (mediaPlayer == null) {
-            Log.e(TAG, "Failed to create MediaPlayer, resource might be missing.")
+            Log.e(TAG, "Failed to create MediaPlayer for resource $soundName. Check if the file exists in res/raw.")
             stopSelf()
             return
         }
 
-        // This is crucial: use the ALARM stream
         mediaPlayer?.setAudioAttributes(
             AudioAttributes.Builder()
                 .setLegacyStreamType(AudioManager.STREAM_ALARM)
@@ -68,7 +75,7 @@ class AlarmSoundService : Service(), MediaPlayer.OnCompletionListener, MediaPlay
         mediaPlayer?.setOnCompletionListener(this)
         mediaPlayer?.setOnErrorListener(this)
         mediaPlayer?.start()
-        Log.d(TAG, "MediaPlayer started")
+        Log.d(TAG, "MediaPlayer started with sound: $soundName")
     }
 
     private fun createNotificationChannel() {
@@ -99,7 +106,7 @@ class AlarmSoundService : Service(), MediaPlayer.OnCompletionListener, MediaPlay
     override fun onError(mp: MediaPlayer?, what: Int, extra: Int): Boolean {
         Log.e(TAG, "MediaPlayer error: what=$what, extra=$extra")
         stopSelf()
-        return true // Indicates we handled the error
+        return true
     }
 
     override fun onDestroy() {

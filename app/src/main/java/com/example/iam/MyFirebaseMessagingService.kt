@@ -37,8 +37,10 @@ class MyFirebaseMessagingService : FirebaseMessagingService() {
             Log.d(TAG, "Data payload: ${remoteMessage.data}")
             val type = remoteMessage.data["tipo"]
             if (type == "alarma") {
-                Log.d(TAG, "Mensaje de debug")
-                scheduleAlarm()
+                Log.d(TAG, "Mensaje de debug se envia larma")
+                val sound = remoteMessage.data["sonido"]
+                Log.d(TAG, "$sound")
+                scheduleAlarm(sound)
                 showNotification(remoteMessage.data["title"], remoteMessage.data["body"], ALARM_CHANNEL_ID, NotificationCompat.PRIORITY_HIGH)
             } else {
                 Log.d(TAG, "Mensaje de notificación")
@@ -51,9 +53,11 @@ class MyFirebaseMessagingService : FirebaseMessagingService() {
         }
     }
 
-    private fun scheduleAlarm() {
+    private fun scheduleAlarm(sound: String?) {
         val alarmManager = getSystemService(Context.ALARM_SERVICE) as AlarmManager
-        val intent = Intent(this, AlarmReceiver::class.java)
+        val intent = Intent(this, AlarmReceiver::class.java).apply {
+            putExtra("sonido", sound)
+        }
         val pendingIntent = PendingIntent.getBroadcast(this, 0, intent, PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT)
         val triggerTime = System.currentTimeMillis() + 500 // 500ms from now
 

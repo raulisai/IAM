@@ -9,7 +9,10 @@ import android.util.Log
 class AlarmReceiver : BroadcastReceiver() {
     override fun onReceive(context: Context, intent: Intent) {
         Log.d("AlarmReceiver", "Alarm received, starting AlarmSoundService.")
-        val serviceIntent = Intent(context, AlarmSoundService::class.java)
+        val sound = intent.getStringExtra("sonido")
+        val serviceIntent = Intent(context, AlarmSoundService::class.java).apply {
+            putExtra("sonido", sound)
+        }
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
             context.startForegroundService(serviceIntent)
         } else {
