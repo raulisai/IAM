@@ -29,6 +29,7 @@ import androidx.core.view.WindowInsetsCompat
 import androidx.core.view.WindowInsetsControllerCompat
 import androidx.health.connect.client.PermissionController
 import androidx.lifecycle.lifecycleScope
+import com.example.iam.network.AuthManager
 import com.example.iam.network.TokenUploader
 import com.google.firebase.messaging.FirebaseMessaging
 import kotlinx.coroutines.launch
@@ -85,6 +86,8 @@ class MainActivity : ComponentActivity() {
         super.onCreate(savedInstanceState)
         WindowCompat.setDecorFitsSystemWindows(window, false)
 
+        AuthManager.init(applicationContext)
+
         val windowInsetsController = WindowCompat.getInsetsController(window, window.decorView)
         windowInsetsController.systemBarsBehavior = WindowInsetsControllerCompat.BEHAVIOR_SHOW_TRANSIENT_BARS_BY_SWIPE
         windowInsetsController.hide(WindowInsetsCompat.Type.systemBars())
@@ -133,6 +136,8 @@ class MainActivity : ComponentActivity() {
         // Inicializar TTSInterface y registrarlo en el WebView
         ttsInterface = TTSInterface(this)
         webView.addJavascriptInterface(ttsInterface, "AndroidTTS")
+        webView.addJavascriptInterface(WebAppInterface(this), "AndroidApp")
+
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.KITKAT) {
             WebView.setWebContentsDebuggingEnabled(true)
         }

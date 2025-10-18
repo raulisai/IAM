@@ -20,7 +20,6 @@ object TokenUploader {
     private const val TAG = "TokenUploader"
     // Cambia la baseURL a la de tu backend
     private const val BASE_URL = "https://s8s23kr8-5000.usw3.devtunnels.ms"
-    private const val STATIC_BEARER_TOKEN = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJ1c2VyX2lkIjoiNmEwMTI3NzctZmRhZi00ZWUxLWI0MWItYjU5ZjQ4Mzc0ZjU5IiwiZW1haWwiOiJkakB4eC5jb20iLCJuYW1lIjoiRGpva2VyIE0iLCJleHAiOjE3NjA3MTg1ODcsImlhdCI6MTc2MDYzMjE4N30.UonZrnr_sZjrdCO5CtTsoat0vCFDkP9cMud06GI5xEA"
 
     private val api: TokenApi by lazy {
         // Configurar Moshi con soporte para Kotlin
@@ -33,12 +32,17 @@ object TokenUploader {
 
         // Interceptor para añadir headers necesarios
         val authInterceptor = Interceptor { chain ->
+            val token = AuthManager.getAuthToken()
             val originalRequest = chain.request()
-            val requestWithAuth = originalRequest.newBuilder()
-                .header("Authorization", "Bearer $STATIC_BEARER_TOKEN")
-                .header("Content-Type", "application/json")
-                .header("Accept", "application/json")
-                .build()
+            val requestWithAuth = if (token != null) {
+                originalRequest.newBuilder()
+                    .header("Authorization", "Bearer $token")
+                    .header("Content-Type", "application/json")
+                    .header("Accept", "application/json")
+                    .build()
+            } else {
+                originalRequest
+            }
             chain.proceed(requestWithAuth)
         }
 
